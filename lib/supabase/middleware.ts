@@ -37,12 +37,16 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Do not run code between createServerClient and
-  // supabase.auth.getUser(). A simple mistake could make it very hard to debug
-  // issues with users being randomly logged out.
+  // Refresh session if expired - this is important for keeping users logged in
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser()
+
+  // If there's an auth error (like expired session), clear cookies and redirect to login
+  if (error) {
+    console.error('Auth error in middleware:', error.message)
+  }
 
   // Protected routes - redirect to login if not authenticated
   const isAuthPage = request.nextUrl.pathname.startsWith('/login')

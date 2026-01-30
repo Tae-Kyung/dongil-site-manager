@@ -37,6 +37,14 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    // Add timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (isLoading) {
+        setError('데이터 로딩 시간이 초과되었습니다. 페이지를 새로고침 해주세요.')
+        setIsLoading(false)
+      }
+    }, 15000) // 15 second timeout
+
     const fetchDashboardData = async () => {
       try {
         const supabase = createClient()
@@ -109,14 +117,18 @@ export default function DashboardPage() {
       })) || [])
 
       setIsLoading(false)
+      clearTimeout(timeoutId)
       } catch (err) {
         console.error('Dashboard data fetch error:', err)
-        setError('데이터를 불러오는데 실패했습니다. 환경 변수 설정을 확인해주세요.')
+        setError('데이터를 불러오는데 실패했습니다. 페이지를 새로고침하거나 다시 로그인해주세요.')
         setIsLoading(false)
+        clearTimeout(timeoutId)
       }
     }
 
     fetchDashboardData()
+
+    return () => clearTimeout(timeoutId)
   }, [])
 
   if (isLoading) {
@@ -129,12 +141,11 @@ export default function DashboardPage() {
         <AlertTriangle className="h-12 w-12 text-yellow-500 mb-4" />
         <h2 className="text-xl font-semibold mb-2">연결 오류</h2>
         <p className="text-muted-foreground mb-4">{error}</p>
+        <Button onClick={() => window.location.reload()} className="mb-4">
+          페이지 새로고침
+        </Button>
         <p className="text-sm text-muted-foreground max-w-md">
-          Vercel Dashboard에서 환경 변수를 설정했는지 확인해주세요:
-          <br />
-          <code className="bg-muted px-2 py-1 rounded mt-2 inline-block">NEXT_PUBLIC_SUPABASE_URL</code>
-          <br />
-          <code className="bg-muted px-2 py-1 rounded mt-1 inline-block">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
+          문제가 계속되면 다시 로그인하거나 환경 변수를 확인해주세요.
         </p>
       </div>
     )

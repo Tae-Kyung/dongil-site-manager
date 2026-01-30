@@ -20,9 +20,9 @@ export function useAuth() {
     error: null,
   })
 
-  const supabase = createClient()
-
   useEffect(() => {
+    const supabase = createClient()
+
     // Get initial session
     const getInitialSession = async () => {
       try {
@@ -101,6 +101,7 @@ export function useAuth() {
 
   const signIn = async (email: string, password: string) => {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
+    const supabase = createClient()
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -117,6 +118,7 @@ export function useAuth() {
 
   const signUp = async (email: string, password: string, name: string) => {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
+    const supabase = createClient()
 
     const { error } = await supabase.auth.signUp({
       email,
@@ -136,6 +138,7 @@ export function useAuth() {
 
   const signOut = async () => {
     setState(prev => ({ ...prev, isLoading: true }))
+    const supabase = createClient()
     await supabase.auth.signOut()
     setState({
       user: null,
