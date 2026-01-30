@@ -19,28 +19,56 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, retryCount = 0) => {
     e.preventDefault()
     setIsLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (error) {
+      if (error) {
+        // Handle network errors with retry
+        if (error.message.toLowerCase().includes('fetch') && retryCount < 2) {
+          console.log(`Login retry attempt ${retryCount + 1}...`)
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          return handleSubmit(e, retryCount + 1)
+        }
+
+        setError(
+          error.message === 'Invalid login credentials'
+            ? '이메일 또는 비밀번호가 올바르지 않습니다.'
+            : error.message.toLowerCase().includes('fetch')
+              ? '네트워크 연결에 실패했습니다. 인터넷 연결을 확인해주세요.'
+              : error.message
+        )
+        setIsLoading(false)
+        return
+      }
+
+      // 완전한 페이지 리로드로 쿠키와 세션이 제대로 설정되도록 함
+      window.location.href = '/'
+    } catch (err) {
+      // Handle unexpected errors (network issues, etc.)
+      const errorMessage = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.'
+
+      // Retry on network errors
+      if (errorMessage.toLowerCase().includes('fetch') && retryCount < 2) {
+        console.log(`Login retry attempt ${retryCount + 1}...`)
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        return handleSubmit(e, retryCount + 1)
+      }
+
       setError(
-        error.message === 'Invalid login credentials'
-          ? '이메일 또는 비밀번호가 올바르지 않습니다.'
-          : error.message
+        errorMessage.toLowerCase().includes('fetch')
+          ? '네트워크 연결에 실패했습니다. 인터넷 연결을 확인해주세요.'
+          : errorMessage
       )
       setIsLoading(false)
-      return
     }
-
-    router.push('/')
-    router.refresh()
   }
 
   return (

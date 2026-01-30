@@ -22,79 +22,51 @@ export function useAuth() {
 
   useEffect(() => {
     const supabase = createClient()
+    let isMounted = true
 
-    // Get initial session
-    const getInitialSession = async () => {
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    // Helper function to update auth state
+    const updateAuthState = async (session: { user: User } | null) => {
+      if (!isMounted) return
 
-        if (sessionError) throw sessionError
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
 
-        if (session?.user) {
-          const { data: profile, error: profileError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
+        if (!isMounted) return
 
-          if (profileError && profileError.code !== 'PGRST116') {
-            console.error('Error fetching profile:', profileError)
-          }
-
-          setState({
-            user: session.user,
-            profile: profile || null,
-            isLoading: false,
-            error: null,
-          })
-        } else {
-          setState({
-            user: null,
-            profile: null,
-            isLoading: false,
-            error: null,
-          })
-        }
-      } catch (error) {
+        setState({
+          user: session.user,
+          profile: profile || null,
+          isLoading: false,
+          error: null,
+        })
+      } else {
         setState({
           user: null,
           profile: null,
           isLoading: false,
-          error: error instanceof Error ? error.message : 'Authentication error',
+          error: null,
         })
       }
     }
 
-    getInitialSession()
+    // Get initial session immediately
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      updateAuthState(session)
+    })
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (session?.user) {
-          const { data: profile } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
-
-          setState({
-            user: session.user,
-            profile: profile || null,
-            isLoading: false,
-            error: null,
-          })
-        } else {
-          setState({
-            user: null,
-            profile: null,
-            isLoading: false,
-            error: null,
-          })
-        }
+      async (_event, session) => {
+        updateAuthState(session)
       }
     )
 
     return () => {
+      isMounted = false
       subscription.unsubscribe()
     }
   }, [])

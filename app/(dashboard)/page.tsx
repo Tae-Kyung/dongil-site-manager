@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/hooks/useAuth'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -29,6 +30,7 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
+  const { user, isLoading: authLoading } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [recentProjects, setRecentProjects] = useState<ProjectRow[]>([])
   const [recentInsights, setRecentInsights] = useState<AiInsightRow[]>([])
@@ -36,140 +38,87 @@ export default function DashboardPage() {
   const [projectsByStep, setProjectsByStep] = useState<Record<string, number>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const fetchingRef = useRef(false)
-  const mountedRef = useRef(true)
 
-  const fetchDashboardData = async (retryCount = 0) => {
-    // Prevent duplicate fetches
-    if (fetchingRef.current) return
-    fetchingRef.current = true
+  useEffect(() => {
+    // Wait for auth to finish loading
+    if (authLoading) return
 
-    try {
-      const supabase = createClient()
-
-      // First check if user is authenticated
-      const { data: { session }, error: authError } = await supabase.auth.getSession()
-
-      if (authError || !session) {
-        // Retry once if auth fails (might be temporary)
-        if (retryCount < 1) {
-          fetchingRef.current = false
-          await new Promise(resolve => setTimeout(resolve, 1000))
-          return fetchDashboardData(retryCount + 1)
-        }
-        if (mountedRef.current) {
-          setError('인증이 필요합니다. 다시 로그인해주세요.')
-          setIsLoading(false)
-        }
-        fetchingRef.current = false
-        return
-      }
-
-      // Fetch all data
-      const [statsResult, projectsResult, stepsResult, insightsResult, logsResult] = await Promise.all([
-        // Stats queries
-        Promise.all([
-          supabase.from('projects').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-          supabase.from('projects').select('*', { count: 'exact', head: true })
-            .eq('status', 'completed')
-            .gte('updated_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
-          supabase.from('documents').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-          supabase.from('ai_insights').select('*', { count: 'exact', head: true }).eq('is_resolved', false),
-        ]),
-        // Recent projects
-        supabase.from('projects').select('*').eq('status', 'active').order('updated_at', { ascending: false }).limit(5),
-        // Projects by step
-        supabase.from('projects').select('process_step').eq('status', 'active'),
-        // Recent insights
-        supabase.from('ai_insights').select('*').eq('is_resolved', false).order('created_at', { ascending: false }).limit(3),
-        // Recent logs
-        supabase.from('site_logs').select('*, projects(name)').order('created_at', { ascending: false }).limit(5),
-      ])
-
-      if (!mountedRef.current) {
-        fetchingRef.current = false
-        return
-      }
-
-      const [activeRes, completedRes, pendingRes, insightsCountRes] = statsResult
-
-      setStats({
-        activeProjects: activeRes.count || 0,
-        completedThisMonth: completedRes.count || 0,
-        pendingDocuments: pendingRes.count || 0,
-        unresolvedInsights: insightsCountRes.count || 0,
-      })
-
-      setRecentProjects(projectsResult.data || [])
-
-      const stepCounts: Record<string, number> = {}
-      PROCESS_STEPS.forEach(step => { stepCounts[step.key] = 0 })
-      stepsResult.data?.forEach(p => {
-        stepCounts[p.process_step] = (stepCounts[p.process_step] || 0) + 1
-      })
-      setProjectsByStep(stepCounts)
-
-      setRecentInsights(insightsResult.data || [])
-
-      setRecentLogs(logsResult.data?.map(log => ({
-        ...log,
-        project_name: (log.projects as { name: string } | null)?.name
-      })) || [])
-
+    // If no user after auth loading, show error
+    if (!user) {
+      setError('인증이 필요합니다.')
       setIsLoading(false)
-      setError(null)
-    } catch (err: unknown) {
-      // Ignore abort errors - these happen during navigation or component unmount
-      if (err instanceof Error && err.name === 'AbortError') {
-        console.log('Fetch aborted - this is normal during navigation')
-        fetchingRef.current = false
-        return
-      }
+      return
+    }
 
-      console.error('Dashboard data fetch error:', err)
+    let cancelled = false
+    const supabase = createClient()
 
-      // Retry on error (up to 2 times)
-      if (retryCount < 2) {
-        fetchingRef.current = false
-        await new Promise(resolve => setTimeout(resolve, 1500))
-        if (mountedRef.current) {
-          return fetchDashboardData(retryCount + 1)
-        }
-        return
-      }
+    async function fetchDashboardData() {
+      try {
+        // Fetch all data
+        const [statsResult, projectsResult, stepsResult, insightsResult, logsResult] = await Promise.all([
+          Promise.all([
+            supabase.from('projects').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+            supabase.from('projects').select('*', { count: 'exact', head: true })
+              .eq('status', 'completed')
+              .gte('updated_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+            supabase.from('documents').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+            supabase.from('ai_insights').select('*', { count: 'exact', head: true }).eq('is_resolved', false),
+          ]),
+          supabase.from('projects').select('*').eq('status', 'active').order('updated_at', { ascending: false }).limit(5),
+          supabase.from('projects').select('process_step').eq('status', 'active'),
+          supabase.from('ai_insights').select('*').eq('is_resolved', false).order('created_at', { ascending: false }).limit(3),
+          supabase.from('site_logs').select('*, projects(name)').order('created_at', { ascending: false }).limit(5),
+        ])
 
-      if (mountedRef.current) {
+        if (cancelled) return
+
+        const [activeRes, completedRes, pendingRes, insightsCountRes] = statsResult
+
+        setStats({
+          activeProjects: activeRes.count || 0,
+          completedThisMonth: completedRes.count || 0,
+          pendingDocuments: pendingRes.count || 0,
+          unresolvedInsights: insightsCountRes.count || 0,
+        })
+
+        setRecentProjects(projectsResult.data || [])
+
+        const stepCounts: Record<string, number> = {}
+        PROCESS_STEPS.forEach(step => { stepCounts[step.key] = 0 })
+        stepsResult.data?.forEach(p => {
+          stepCounts[p.process_step] = (stepCounts[p.process_step] || 0) + 1
+        })
+        setProjectsByStep(stepCounts)
+
+        setRecentInsights(insightsResult.data || [])
+
+        setRecentLogs(logsResult.data?.map(log => ({
+          ...log,
+          project_name: (log.projects as { name: string } | null)?.name
+        })) || [])
+
+        setIsLoading(false)
+        setError(null)
+      } catch (err) {
+        if (cancelled) return
+        console.error('Dashboard fetch error:', err)
         setError('데이터를 불러오는데 실패했습니다.')
         setIsLoading(false)
       }
-    } finally {
-      fetchingRef.current = false
     }
-  }
 
-  useEffect(() => {
-    mountedRef.current = true
     fetchDashboardData()
 
-    // Timeout fallback
-    const timeoutId = setTimeout(() => {
-      if (mountedRef.current && isLoading) {
-        setError('데이터 로딩 시간이 초과되었습니다.')
-        setIsLoading(false)
-      }
-    }, 20000)
-
     return () => {
-      mountedRef.current = false
-      clearTimeout(timeoutId)
+      cancelled = true
     }
-  }, [])
+  }, [user?.id, authLoading])
 
   const handleRefresh = () => {
     setIsLoading(true)
     setError(null)
-    fetchingRef.current = false
-    fetchDashboardData()
+    window.location.reload()
   }
 
   if (isLoading) {

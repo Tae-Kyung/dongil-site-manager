@@ -38,14 +38,21 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Refresh session if expired - this is important for keeping users logged in
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
+  let user = null
+  try {
+    // First try to get session from cookie (faster, no network call)
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
-  // If there's an auth error (like expired session), clear cookies and redirect to login
-  if (error) {
-    console.error('Auth error in middleware:', error.message)
+    if (session?.user) {
+      user = session.user
+    } else if (sessionError) {
+      console.error('Session error in middleware:', sessionError.message)
+    }
+  } catch (err) {
+    // Handle network errors gracefully - allow the request to continue
+    console.error('Network error in middleware:', err instanceof Error ? err.message : 'Unknown error')
+    // On network error, allow the request to proceed to avoid blocking all requests
+    return supabaseResponse
   }
 
   // Protected routes - redirect to login if not authenticated

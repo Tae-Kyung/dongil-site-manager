@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 let supabaseClient: SupabaseClient | null = null
 
 export function createClient() {
+  // Return existing client if already created (singleton pattern)
   if (supabaseClient) {
     return supabaseClient
   }
@@ -19,12 +20,7 @@ export function createClient() {
     )
   }
 
-  supabaseClient = createBrowserClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-    },
-  })
+  // Create singleton client
+  supabaseClient = createBrowserClient(supabaseUrl, supabaseAnonKey)
   return supabaseClient
 }
