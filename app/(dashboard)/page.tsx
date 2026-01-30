@@ -34,10 +34,12 @@ export default function DashboardPage() {
   const [recentLogs, setRecentLogs] = useState<(SiteLogRow & { project_name?: string })[]>([])
   const [projectsByStep, setProjectsByStep] = useState<Record<string, number>>({})
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchDashboardData = async () => {
-      const supabase = createClient()
+      try {
+        const supabase = createClient()
 
       // Fetch stats
       const [
@@ -107,6 +109,11 @@ export default function DashboardPage() {
       })) || [])
 
       setIsLoading(false)
+      } catch (err) {
+        console.error('Dashboard data fetch error:', err)
+        setError('데이터를 불러오는데 실패했습니다. 환경 변수 설정을 확인해주세요.')
+        setIsLoading(false)
+      }
     }
 
     fetchDashboardData()
@@ -114,6 +121,23 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return <LoadingPage />
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
+        <AlertTriangle className="h-12 w-12 text-yellow-500 mb-4" />
+        <h2 className="text-xl font-semibold mb-2">연결 오류</h2>
+        <p className="text-muted-foreground mb-4">{error}</p>
+        <p className="text-sm text-muted-foreground max-w-md">
+          Vercel Dashboard에서 환경 변수를 설정했는지 확인해주세요:
+          <br />
+          <code className="bg-muted px-2 py-1 rounded mt-2 inline-block">NEXT_PUBLIC_SUPABASE_URL</code>
+          <br />
+          <code className="bg-muted px-2 py-1 rounded mt-1 inline-block">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
+        </p>
+      </div>
+    )
   }
 
   return (
