@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SiteLogRow, InsertTables } from '@/types/database'
 
@@ -30,6 +30,7 @@ export function useSiteLogs({ projectId, limit }: UseSiteLogsOptions): UseSiteLo
   const [siteLogs, setSiteLogs] = useState<SiteLogRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const mountedRef = useRef(true)
 
   const fetchSiteLogs = useCallback(async () => {
     if (!projectId) return
@@ -37,31 +38,46 @@ export function useSiteLogs({ projectId, limit }: UseSiteLogsOptions): UseSiteLo
     setIsLoading(true)
     setError(null)
 
-    const supabase = createClient()
-    let query = supabase
-      .from('site_logs')
-      .select('*')
-      .eq('project_id', projectId)
-      .order('work_date', { ascending: false })
-      .order('created_at', { ascending: false })
+    try {
+      const supabase = createClient()
+      let query = supabase
+        .from('site_logs')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('work_date', { ascending: false })
+        .order('created_at', { ascending: false })
 
-    if (limit) {
-      query = query.limit(limit)
+      if (limit) {
+        query = query.limit(limit)
+      }
+
+      const { data, error: fetchError } = await query
+
+      if (!mountedRef.current) return
+
+      if (fetchError) {
+        setError(new Error(fetchError.message))
+      } else {
+        setSiteLogs(data || [])
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return
+      if (!mountedRef.current) return
+      setError(new Error('데이터를 불러오는데 실패했습니다.'))
     }
 
-    const { data, error: fetchError } = await query
-
-    if (fetchError) {
-      setError(new Error(fetchError.message))
-    } else {
-      setSiteLogs(data || [])
+    if (mountedRef.current) {
+      setIsLoading(false)
     }
-
-    setIsLoading(false)
   }, [projectId, limit])
 
   useEffect(() => {
+    mountedRef.current = true
     fetchSiteLogs()
+
+    return () => {
+      mountedRef.current = false
+    }
   }, [fetchSiteLogs])
 
   const createSiteLog = async (input: CreateSiteLogInput) => {

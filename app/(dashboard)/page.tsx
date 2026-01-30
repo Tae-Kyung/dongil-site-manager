@@ -112,7 +112,13 @@ export default function DashboardPage() {
 
       setIsLoading(false)
       setError(null)
-    } catch (err) {
+    } catch (err: unknown) {
+      // Ignore abort errors - these happen during navigation or component unmount
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log('Fetch aborted - this is normal during navigation')
+        return
+      }
+
       console.error('Dashboard data fetch error:', err)
       if (mountedRef.current) {
         setError('데이터를 불러오는데 실패했습니다.')

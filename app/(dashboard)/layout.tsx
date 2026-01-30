@@ -18,21 +18,33 @@ export default function DashboardLayout({
   const [recentProjects, setRecentProjects] = useState<ProjectRow[]>([])
 
   useEffect(() => {
-    const fetchRecentProjects = async () => {
-      const supabase = createClient()
-      const { data } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('status', 'active')
-        .order('updated_at', { ascending: false })
-        .limit(5)
+    let isMounted = true
 
-      if (data) {
-        setRecentProjects(data)
+    const fetchRecentProjects = async () => {
+      try {
+        const supabase = createClient()
+        const { data } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('status', 'active')
+          .order('updated_at', { ascending: false })
+          .limit(5)
+
+        if (data && isMounted) {
+          setRecentProjects(data)
+        }
+      } catch (err) {
+        // Ignore abort errors
+        if (err instanceof Error && err.name === 'AbortError') return
+        console.error('Failed to fetch recent projects:', err)
       }
     }
 
     fetchRecentProjects()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   return (
