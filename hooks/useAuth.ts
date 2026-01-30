@@ -139,7 +139,8 @@ export function useAuth() {
   const signOut = async () => {
     setState(prev => ({ ...prev, isLoading: true }))
     const supabase = createClient()
-    await supabase.auth.signOut()
+    // Use 'local' scope to only sign out this browser, not all sessions
+    await supabase.auth.signOut({ scope: 'local' })
     setState({
       user: null,
       profile: null,

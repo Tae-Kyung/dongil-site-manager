@@ -39,7 +39,7 @@ export default function DashboardPage() {
   const fetchingRef = useRef(false)
   const mountedRef = useRef(true)
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (retryCount = 0) => {
     // Prevent duplicate fetches
     if (fetchingRef.current) return
     fetchingRef.current = true
@@ -51,6 +51,12 @@ export default function DashboardPage() {
       const { data: { session }, error: authError } = await supabase.auth.getSession()
 
       if (authError || !session) {
+        // Retry once if auth fails (might be temporary)
+        if (retryCount < 1) {
+          fetchingRef.current = false
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          return fetchDashboardData(retryCount + 1)
+        }
         if (mountedRef.current) {
           setError('인증이 필요합니다. 다시 로그인해주세요.')
           setIsLoading(false)
@@ -116,10 +122,22 @@ export default function DashboardPage() {
       // Ignore abort errors - these happen during navigation or component unmount
       if (err instanceof Error && err.name === 'AbortError') {
         console.log('Fetch aborted - this is normal during navigation')
+        fetchingRef.current = false
         return
       }
 
       console.error('Dashboard data fetch error:', err)
+
+      // Retry on error (up to 2 times)
+      if (retryCount < 2) {
+        fetchingRef.current = false
+        await new Promise(resolve => setTimeout(resolve, 1500))
+        if (mountedRef.current) {
+          return fetchDashboardData(retryCount + 1)
+        }
+        return
+      }
+
       if (mountedRef.current) {
         setError('데이터를 불러오는데 실패했습니다.')
         setIsLoading(false)

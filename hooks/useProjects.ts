@@ -21,7 +21,7 @@ export function useProjects(options: UseProjectsOptions = {}) {
   const [error, setError] = useState<string | null>(null)
   const mountedRef = useRef(true)
 
-  const fetchProjects = useCallback(async () => {
+  const fetchProjects = useCallback(async (retryCount = 0) => {
     setIsLoading(true)
     setError(null)
 
@@ -53,6 +53,12 @@ export function useProjects(options: UseProjectsOptions = {}) {
       if (!mountedRef.current) return
 
       if (fetchError) {
+        // Retry on error
+        if (retryCount < 2) {
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          if (mountedRef.current) return fetchProjects(retryCount + 1)
+          return
+        }
         setError(fetchError.message)
         setProjects([])
       } else {
@@ -61,6 +67,13 @@ export function useProjects(options: UseProjectsOptions = {}) {
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return
       if (!mountedRef.current) return
+
+      // Retry on error
+      if (retryCount < 2) {
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        if (mountedRef.current) return fetchProjects(retryCount + 1)
+        return
+      }
       setError('데이터를 불러오는데 실패했습니다.')
       setProjects([])
     }
@@ -93,7 +106,7 @@ export function useProject(id: string) {
   const [error, setError] = useState<string | null>(null)
   const mountedRef = useRef(true)
 
-  const fetchProject = useCallback(async () => {
+  const fetchProject = useCallback(async (retryCount = 0) => {
     if (!id) return
 
     setIsLoading(true)
@@ -114,6 +127,12 @@ export function useProject(id: string) {
       if (!mountedRef.current) return
 
       if (fetchError) {
+        // Retry on error
+        if (retryCount < 2) {
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          if (mountedRef.current) return fetchProject(retryCount + 1)
+          return
+        }
         setError(fetchError.message)
         setProject(null)
       } else {
@@ -122,6 +141,13 @@ export function useProject(id: string) {
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return
       if (!mountedRef.current) return
+
+      // Retry on error
+      if (retryCount < 2) {
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        if (mountedRef.current) return fetchProject(retryCount + 1)
+        return
+      }
       setError('데이터를 불러오는데 실패했습니다.')
       setProject(null)
     }
